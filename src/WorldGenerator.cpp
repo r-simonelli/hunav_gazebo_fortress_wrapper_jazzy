@@ -18,7 +18,7 @@
 /***********************************************************************/
 
 #include "hunav_gazebo_fortress_wrapper/WorldGenerator.hpp"
-//#include <ament_index_cpp/get_package_prefix.hpp>
+#include <ament_index_cpp/get_package_prefix.hpp>
 //#include <ament_index_cpp/get_package_share_directory.hpp>
 
 using namespace tinyxml2;
@@ -450,35 +450,62 @@ bool WorldGenerator::writePhysics(tinyxml2::XMLDocument &doc)
 
 bool WorldGenerator::writeRos2Plugins(tinyxml2::XMLDocument &doc)
 {
+  tinyxml2::XMLElement* world = doc.FirstChildElement("sdf")->FirstChildElement("world");
+
+  // Base worlds authored directly for Gazebo Harmonic (like this workspace's
+  // lab_world.sdf) already declare these standard system plugins under
+  // their Harmonic names (gz-sim-*-system / gz::sim::systems::*), unlike
+  // upstream's own demo worlds. Skip any plugin whose name attribute is
+  // already present, so we don't load it twice.
+  auto alreadyPresent = [world](const char* name) {
+    for (auto* p = world->FirstChildElement("plugin"); p != nullptr;
+         p = p->NextSiblingElement("plugin"))
+    {
+      const char* n = p->Attribute("name");
+      if (n != nullptr && std::string(n) == name)
+        return true;
+    }
+    return false;
+  };
+
   // Physics plugin
-  tinyxml2::XMLElement* physicsPlugin = doc.NewElement("plugin");
-  physicsPlugin->SetAttribute("filename", "libignition-gazebo-physics-system.so");
-  physicsPlugin->SetAttribute("name", "ignition::gazebo::systems::Physics");
+  if (!alreadyPresent("gz::sim::systems::Physics"))
+  {
+    tinyxml2::XMLElement* physicsPlugin = doc.NewElement("plugin");
+    physicsPlugin->SetAttribute("filename", "gz-sim-physics-system");
+    physicsPlugin->SetAttribute("name", "gz::sim::systems::Physics");
+    world->InsertFirstChild(physicsPlugin);
+  }
 
   // Sensors plugin
-  tinyxml2::XMLElement* sensorsPlugin = doc.NewElement("plugin");
-  sensorsPlugin->SetAttribute("filename", "libignition-gazebo-sensors-system.so");
-  sensorsPlugin->SetAttribute("name", "ignition::gazebo::systems::Sensors");
-  tinyxml2::XMLElement* pRender = doc.NewElement("render_engine");
-  pRender->SetText("ogre"); //ogre2
+  if (!alreadyPresent("gz::sim::systems::Sensors"))
+  {
+    tinyxml2::XMLElement* sensorsPlugin = doc.NewElement("plugin");
+    sensorsPlugin->SetAttribute("filename", "gz-sim-sensors-system");
+    sensorsPlugin->SetAttribute("name", "gz::sim::systems::Sensors");
+    tinyxml2::XMLElement* pRender = doc.NewElement("render_engine");
+    pRender->SetText("ogre2");
+    sensorsPlugin->InsertFirstChild(pRender);
+    world->InsertFirstChild(sensorsPlugin);
+  }
 
   // Commands plugin
-  tinyxml2::XMLElement* cmdsPlugin = doc.NewElement("plugin");
-  cmdsPlugin->SetAttribute("filename", "libignition-gazebo-user-commands-system.so");
-  cmdsPlugin->SetAttribute("name", "ignition::gazebo::systems::UserCommands");
+  if (!alreadyPresent("gz::sim::systems::UserCommands"))
+  {
+    tinyxml2::XMLElement* cmdsPlugin = doc.NewElement("plugin");
+    cmdsPlugin->SetAttribute("filename", "gz-sim-user-commands-system");
+    cmdsPlugin->SetAttribute("name", "gz::sim::systems::UserCommands");
+    world->InsertFirstChild(cmdsPlugin);
+  }
 
   // Broadcast plugin
-  tinyxml2::XMLElement* brcastPlugin = doc.NewElement("plugin");
-  brcastPlugin->SetAttribute("filename", "libignition-gazebo-scene-broadcaster-system.so");
-  brcastPlugin->SetAttribute("name", "ignition::gazebo::systems::SceneBroadcaster");
-
-  // Insert in the XML
-  doc.FirstChildElement("sdf")->FirstChildElement("world")->InsertFirstChild(brcastPlugin);
-  doc.FirstChildElement("sdf")->FirstChildElement("world")->InsertFirstChild(cmdsPlugin);
-  doc.FirstChildElement("sdf")->FirstChildElement("world")->InsertFirstChild(sensorsPlugin);
-  tinyxml2::XMLElement* bcPlugin = doc.FirstChildElement("sdf")->FirstChildElement("world")->FirstChildElement("plugin");
-  bcPlugin->InsertFirstChild(pRender);
-  doc.FirstChildElement("sdf")->FirstChildElement("world")->InsertFirstChild(physicsPlugin);
+  if (!alreadyPresent("gz::sim::systems::SceneBroadcaster"))
+  {
+    tinyxml2::XMLElement* brcastPlugin = doc.NewElement("plugin");
+    brcastPlugin->SetAttribute("filename", "gz-sim-scene-broadcaster-system");
+    brcastPlugin->SetAttribute("name", "gz::sim::systems::SceneBroadcaster");
+    world->InsertFirstChild(brcastPlugin);
+  }
 
   return true;
 }
@@ -695,9 +722,17 @@ bool WorldGenerator::writeHuNavPlugin(tinyxml2::XMLDocument &doc, int position)
     name = "HuNavSystemPluginIGN";
   }
 
-  // CREATE PLUGIN TAG 
+  // Reference the plugin by absolute path rather than relying on
+  // GZ_SIM_SYSTEM_PLUGIN_PATH being set correctly by whatever launches this
+  // generated world (avoids depending on launch-file ordering across
+  // packages).
+  std::string plugin_path =
+      ament_index_cpp::get_package_prefix("hunav_gazebo_fortress_wrapper") +
+      "/lib/hunav_gazebo_fortress_wrapper/" + filename;
+
+  // CREATE PLUGIN TAG
   tinyxml2::XMLElement* pNewPlugin = doc.NewElement("plugin");
-  pNewPlugin->SetAttribute("filename", filename.c_str());
+  pNewPlugin->SetAttribute("filename", plugin_path.c_str());
   pNewPlugin->SetAttribute("name", name.c_str());
 
   tinyxml2::XMLElement* pUpdate = doc.NewElement("update_rate");

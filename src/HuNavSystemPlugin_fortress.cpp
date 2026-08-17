@@ -48,7 +48,7 @@
 
 // The error occurs because Ignition Gazebo's `EntityComponentManager` uses a custom traits system to check for equality, and this conflicts with the standard `std::chrono::duration` equality operator. This results in an ambiguous overload for the `operator==`.
 //To resolve this issue, you can explicitly specialize the `HasEqualityOperator` trait for `std::chrono::steady_clock::duration` to indicate that it has a valid equality operator.
-namespace ignition::gazebo::v6::traits {
+namespace gz::sim::traits {
   template<>
   struct HasEqualityOperator<std::chrono::steady_clock::duration> {
     static constexpr bool value = true;
@@ -190,6 +190,13 @@ void HuNavSystemPluginIGN::Configure(const gz::sim::Entity& _entity, const std::
   //rosSrvClient_ = this->rosnode_->create_client<hunav_msgs::srv::MoveAgent>("move_agent");
 
   rosSrvResetClient_ = this->rosnode_->create_client<hunav_msgs::srv::ResetAgents>("reset_agents");
+
+  // Live goal redirection, for external tools (e.g. an RViz2 "2D Nav Goal"
+  // relay) to retarget a running agent without teleporting it. Only `id`
+  // and `goals` are read from the message.
+  goalOverrideSub_ = this->rosnode_->create_subscription<hunav_msgs::msg::Agent>(
+      "hunav/goal_override", 10,
+      std::bind(&HuNavSystemPluginIGN::goalOverrideCallback, this, std::placeholders::_1));
 
   // Initiate the agents and the robot
   try
@@ -862,7 +869,7 @@ bool HuNavSystemPluginIGN::getPedestrianStates(const gz::sim::EntityComponentMan
     //ignmsg << "GetPedestians: Actor [" << pedAgent.name << "] trajpose:  " << pose << std::endl;
     //double yaw = normalizeAngle(pose.Rot().Yaw() - M_PI_2);
     double yaw = normalizeAngle(pose.Rot().Yaw());
-    ignition::math::Vector3d pos = pose.Pos();
+    gz::math::Vector3d pos = pose.Pos();
 
     // Actors in Gazebo (specifically those that move using animations) do not have real physical dynamics 
     // like normal models. This means they do not automatically generate linear and angular velocity values 
@@ -1034,6 +1041,21 @@ void HuNavSystemPluginIGN::fixActorHeight(const hunav_msgs::msg::Agent& ag, gz::
 
 
 
+void HuNavSystemPluginIGN::goalOverrideCallback(const hunav_msgs::msg::Agent::SharedPtr msg)
+{
+  for (auto& pair : pedestrians_)
+  {
+    if (pair.second.id == msg->id)
+    {
+      pair.second.goals = msg->goals;
+      pair.second.cyclic_goals = false;
+      RCLCPP_INFO(rosnode_->get_logger(), "Goal override received for agent %d", msg->id);
+      return;
+    }
+  }
+  RCLCPP_WARN(rosnode_->get_logger(), "Goal override received for unknown agent id %d", msg->id);
+}
+
 void HuNavSystemPluginIGN::updateGazeboPedestrians(gz::sim::EntityComponentManager& _ecm, const gz::sim::UpdateInfo& /*_info*/, const hunav_msgs::msg::Agents& _agents)
 {
   // if (goalReceived == false)
@@ -1073,7 +1095,7 @@ void HuNavSystemPluginIGN::updateGazeboPedestrians(gz::sim::EntityComponentManag
     //yaw -= 0.30;
     double currAngle = actorPose.Rot().Yaw();
     double diff = normalizeAngle(yaw - currAngle);
-    if (std::fabs(diff) > IGN_DTOR(10)) //25 degrees to rads
+    if (std::fabs(diff) > GZ_DTOR(10)) //25 degrees to rads
     {
       yaw = normalizeAngle(currAngle + (diff * 0.01));  // 0.01, 0.005
     }
@@ -1087,7 +1109,7 @@ void HuNavSystemPluginIGN::updateGazeboPedestrians(gz::sim::EntityComponentManag
     actorPose.Pos().Z(0.8);
     //fixActorHeight(a, actorPose);
     // I have to add some pitch to show the agents properly (0.35)
-    actorPose.Rot() = ignition::math::Quaterniond(0, 0, yaw);
+    actorPose.Rot() = gz::math::Quaterniond(0, 0, yaw);
 
 
     // UPDATE TRAJECTORY POSE
@@ -1396,6 +1418,6 @@ void HuNavSystemPluginIGN::PreUpdate(const gz::sim::UpdateInfo& _info, gz::sim::
 
 
 
-IGNITION_ADD_PLUGIN(HuNavSystemPluginIGN, gz::sim::System, HuNavSystemPluginIGN::ISystemConfigure, HuNavSystemPluginIGN::ISystemPreUpdate/*, HuNavPluginIGN::ISystemPostUpdate, HuNavPluginIGN::ISystemReset*/)
+GZ_ADD_PLUGIN(HuNavSystemPluginIGN, gz::sim::System, HuNavSystemPluginIGN::ISystemConfigure, HuNavSystemPluginIGN::ISystemPreUpdate/*, HuNavPluginIGN::ISystemPostUpdate, HuNavPluginIGN::ISystemReset*/)
 
-IGNITION_ADD_PLUGIN_ALIAS(HuNavSystemPluginIGN, "HuNavSystemPluginIGN")
+GZ_ADD_PLUGIN_ALIAS(HuNavSystemPluginIGN, "HuNavSystemPluginIGN")

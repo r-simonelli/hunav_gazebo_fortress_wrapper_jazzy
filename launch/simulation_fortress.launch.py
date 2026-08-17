@@ -107,15 +107,18 @@ def generate_launch_description():
         value=[EnvironmentVariable('GAZEBO_RESOURCE_PATH'), my_gazebo_models]
     )
     
-    # # Add plugin to gazebo path
-    # my_gazebo_plugins = PathJoinSubstitution([
-    #     FindPackageShare('hunav_gazebo_fortress_wrapper'),
-    #     'plugins',
-    # ])
-    # set_env_gz_plugins = AppendEnvironmentVariable(
-    #         'GZ_SIM_SYSTEM_PLUGIN_PATH',
-    #         my_gazebo_plugins)
-    
+    # Add plugin to gazebo path.
+    # HuNavSystemPluginIGN is installed to the package's lib dir (standard
+    # ament layout), not a share/plugins dir, so go up from share/<pkg> to
+    # the install prefix and back down into lib/<pkg>.
+    my_gazebo_plugins = PathJoinSubstitution([
+        FindPackageShare('hunav_gazebo_fortress_wrapper'),
+        '..', '..', 'lib', 'hunav_gazebo_fortress_wrapper',
+    ])
+    set_env_gz_plugins = AppendEnvironmentVariable(
+            'GZ_SIM_SYSTEM_PLUGIN_PATH',
+            my_gazebo_plugins)
+
 
     # the world generator will create this world
     # in this path
@@ -239,7 +242,7 @@ def generate_launch_description():
     ld.add_action(set_env_gz_resources)
     ld.add_action(set_env_gz_append_resources)
     ld.add_action(set_env_gazebo_resources)
-    #ld.add_action(set_env_gz_plugins)
+    ld.add_action(set_env_gz_plugins)
 
     # Declare the launch arguments
     ld.add_action(declare_arg_world)

@@ -19,13 +19,12 @@ find_package(hunav_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(ros_gz REQUIRED)
-find_package(ignition-gazebo6 REQUIRED)
-# # Needed in launch/gz_sim.launch.py.in
-set(GZ_SIM_VER ${gz-sim_VERSION_MAJOR})
-
-ign_find_package(ignition-plugin1 REQUIRED COMPONENTS register)
-set(IGN_PLUGIN_VER ${ignition-plugin1_VERSION_MAJOR})
-#set(IGN_COMMON_VER ${ignition-common_VERSION_MAJOR})
+# Ported from Gazebo Fortress (ignition-gazebo6/ignition-plugin1) to Gazebo
+# Harmonic, which Jazzy pairs with. The ROS-vendored packages already expose
+# standard CMake config packages with COMPONENTS support, so the old
+# ign_find_package() macro (from ignition-cmake) is no longer needed.
+find_package(gz-sim8 REQUIRED)
+find_package(gz-plugin2 REQUIRED COMPONENTS register)
 
 
 include_directories(include)
@@ -59,27 +58,23 @@ link_directories(
 add_library(HuNavSystemPluginIGN SHARED src/HuNavSystemPlugin_fortress.cpp)
 target_include_directories(HuNavSystemPluginIGN PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 $<INSTALL_INTERFACE:include>)
-target_link_libraries(HuNavSystemPluginIGN 
+target_link_libraries(HuNavSystemPluginIGN
     ${TINYXML2_LIBRARY}
-    #ignition-common${IGN_COMMON_VER}::ignition-common${IGN_COMMON_VER}
-    ignition-plugin${IGN_PLUGIN_VER}::ignition-plugin${IGN_PLUGIN_VER}
-)     
+    gz-plugin2::register
+)
 
-ament_target_dependencies(HuNavSystemPluginIGN 
-  rclcpp    
+ament_target_dependencies(HuNavSystemPluginIGN
+  rclcpp
   ros_gz
-  #gz-sim6
-  ignition-gazebo6
+  gz-sim8
   tf2_geometry_msgs
-  hunav_msgs 
-) 
+  hunav_msgs
+)
 
 
-install(TARGETS HuNavSystemPluginIGN #HuNavActorPluginIGN 
+install(TARGETS HuNavSystemPluginIGN #HuNavActorPluginIGN
   ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  #LIBRARY DESTINATION /usr/lib/x86_64-linux-gnu/ign-gazebo-6/plugins
-  LIBRARY DESTINATION ${ignition-gazebo6_PLUGIN_PATH}
+  LIBRARY DESTINATION lib/${PROJECT_NAME}
   RUNTIME DESTINATION bin
 )
 
@@ -96,7 +91,7 @@ install(TARGETS HuNavSystemPluginIGN #HuNavActorPluginIGN
 
 
 add_executable(hunav_gazebo_world_generator src/WorldGenerator.cpp)
-ament_target_dependencies(hunav_gazebo_world_generator rclcpp hunav_msgs geometry_msgs tf2_geometry_msgs tf2 tf2_ros tinyxml2_vendor)
+ament_target_dependencies(hunav_gazebo_world_generator rclcpp ament_index_cpp hunav_msgs geometry_msgs tf2_geometry_msgs tf2 tf2_ros tinyxml2_vendor)
 target_link_libraries(hunav_gazebo_world_generator ${TINYXML2_LIBRARY})
 install(TARGETS hunav_gazebo_world_generator
   DESTINATION lib/${PROJECT_NAME}

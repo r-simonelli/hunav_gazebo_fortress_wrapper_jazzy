@@ -125,6 +125,11 @@ private:
 
   void fixActorHeight(const hunav_msgs::msg::Agent& ag, gz::math::Pose3d& p);
 
+  // Live goal redirection: lets an external node retarget a running agent
+  // without going through hunav_agent_manager (which is stateless per-tick
+  // and only ever echoes back whatever goal it is given in pedestrians_).
+  void goalOverrideCallback(const hunav_msgs::msg::Agent::SharedPtr msg);
+
   rclcpp::Node::SharedPtr rosnode_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr ros_test_pub_;
   //rclcpp::Publisher<vision_msgs::msg::Detection2DArray>::SharedPtr ros_bbs_pub1;
@@ -138,6 +143,7 @@ private:
 
   /// ROS Subscriber
   // rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub;
+  rclcpp::Subscription<hunav_msgs::msg::Agent>::SharedPtr goalOverrideSub_;
 
   /// Robot and Pedestrian Information
   hunav_msgs::msg::Agent robotAgent_;
@@ -194,7 +200,7 @@ private:
   }
 
   // Function to calculate the distance between two axis-aligned bounding boxes
-  inline double CalculateDistance(const ignition::math::AxisAlignedBox& box1, const ignition::math::AxisAlignedBox& box2)
+  inline double CalculateDistance(const gz::math::AxisAlignedBox& box1, const gz::math::AxisAlignedBox& box2)
   {
     gz::math::Vector3d min1 = box1.Min();
     gz::math::Vector3d max1 = box1.Max();
